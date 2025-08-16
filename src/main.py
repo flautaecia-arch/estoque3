@@ -1,5 +1,7 @@
 import os
 import sys
+import tempfile
+
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -11,6 +13,9 @@ from src.routes.produto import produto_bp
 from src.routes.contagem import contagem_bp
 from src.routes.relatorio import relatorio_bp
 from src.routes.importacao import importacao_bp
+
+from src.models.produto import Produto
+from src.models.contagem import Contagem
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
@@ -24,27 +29,35 @@ app.register_blueprint(contagem_bp, url_prefix='/api')
 app.register_blueprint(relatorio_bp, url_prefix='/api')
 app.register_blueprint(importacao_bp, url_prefix='/api')
 
-# Configuração do banco de dados
-DATABASE_URL = os.environ.get('DATABASE_URL')
-
-if DATABASE_URL:
-    # Fix para Render.com PostgreSQL URL
-    if DATABASE_URL.startswith('postgres://'):
-        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-else:
-    # Para desenvolvimento local (SQLite)
-    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-
+# Configuração do banco de dados (usando /tmp no Render)
+temp_db = os.path.join(tempfile.gettempdir(), "app.db")
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{temp_db}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
-# Importar todos os modelos para que sejam criados no banco
-from src.models.produto import Produto
-from src.models.contagem import Contagem
+# Carregar produtos iniciais do JSON
+import json
 
 with app.app_context():
     db.create_all()
+
+    # Carregar produtos iniciais do JSON, apenas se o banco estiver vazio
+    if Produto.query.count() == 0:
+        produtos_path = os.path.join(os.path.dirname(__file__), "produtos.json")
+        if os.path.exists(produtos_path):
+            with open(produtos_path, "r", encoding="utf-8") as f:
+                produtos = json.load(f)
+                for p in produtos:
+                    novo_produto = Produto(
+                        codigo=p["codigo"],
+                        nome=p["nome"],
+                        preco=p.get("preco", 0.0),
+                        unidade=p.get("unidade", "UN"),
+                        quantidade=p.get("quantidade", 0)
+                    )
+                    db.session.add(novo_produto)
+                db.session.commit()
+                print("✅ Produtos iniciais carregados no banco!")
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -64,6 +77,4 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') != 'production'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    app.run(host='0.0.0.0', port=5000, debug=True)

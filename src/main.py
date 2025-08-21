@@ -6,37 +6,37 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from src.models.user import db
+from src.models.produto import Produto
+from src.models.lote import Lote
 from src.routes.user import user_bp
 from src.routes.produto import produto_bp
 from src.routes.contagem import contagem_bp
 from src.routes.relatorio import relatorio_bp
-from src.routes.relatorio_novo import relatorio_novo_bp
-from src.routes.importacao import importacao_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
 
-# Habilitar CORS para todas as rotas
+# Habilitar CORS para permitir acesso do frontend
 CORS(app)
 
-app.register_blueprint(user_bp, url_prefix='/api')
-app.register_blueprint(produto_bp, url_prefix='/api')
-app.register_blueprint(contagem_bp, url_prefix='/api')
-app.register_blueprint(relatorio_bp, url_prefix='/api')
-app.register_blueprint(relatorio_novo_bp, url_prefix='/api')
-app.register_blueprint(importacao_bp, url_prefix='/api')
+app.register_blueprint(user_bp)
+app.register_blueprint(produto_bp)
+app.register_blueprint(contagem_bp)
+app.register_blueprint(relatorio_bp)
 
-# uncomment if you need to use database
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
+import os
+
+db_dir = "/opt/render/project/src/database"
+os.makedirs(db_dir, exist_ok=True)  # cria a pasta se não existir
+
+db_path = os.path.join(db_dir, 'app.db')
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
-# Importar todos os modelos para que sejam criados no banco
-from src.models.produto import Produto
-from src.models.contagem import Contagem
-
 with app.app_context():
     db.create_all()
+
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -56,4 +56,5 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
